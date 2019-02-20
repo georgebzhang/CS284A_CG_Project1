@@ -1,0 +1,242 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=default'></script>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Rasterizer</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2019</h1>
+<h1 align="middle">Project 1: Rasterizer</h1>
+<h2 align="middle">George Zhang, CS184-georgebzhang</h2>
+
+<br><br>
+
+<div>
+
+<p>Note to self/Windows users: To load the template project into Windows 10 Visual Studio 2017, CMake (Visual Studio 15 2017, Win32), Build in Visual Studio, go into ALL_BUILD properties -> Debugging -> Command: $(ProjectDir)Debug\draw.exe, and pass command arguments into Command Arguments: "$(SolutionDir)..\svg\basic\test1.svg". For Freetype, I'm using that provided by Anaconda installed to Path.</p>
+
+<h2 align="middle">Overview</h2>
+<p>In this project, I coded functions in a template project to perform simple single-color rasterization, which involved determining whether a point is bounded by three points, and then expanded on that by adding antialiasing functionality. This was followed by defining translation, rotation, and scaling matrices, as discussed in lecture. Next, I coded support for Barycentric coordinates, which allows us to interpolate values (color, etc...) for all pixels within the triangle and provides another method to determine whether a point is bounded by three points. Finally, I coded functions for texture mapping using various methods based on the pixel sampling and level sampling (for mipmapping) methods. From this project, I learned how important it is to write clean objected-oriented code for such a large project, since much of the code is dependent on code in other classes. </p>
+
+<h2 align="middle">Section I: Rasterization</h2>
+
+<h3 align="middle">Part 1: Rasterizing single-color triangles</h3>
+
+<p>$$ {P=(x,y), P_0=(x_0,y_0), P_1=(x_1,y_1)} $$</p>
+<p>$$ {T=P_1-P_0=(x_1-x_0,y_1-y_0)} $$</p>
+<p>$$ {N=\bot(T)=(-(y_1-y_0),x_1-x_0)} $$</p>
+<p>$$ {V=P-P_0=(x-x_0,y-y_0)} $$</p>
+<p>$$ {L(x,y)=V \cdot N=-(x-x_0)(y_1-y_0)+(y-y_0)(x_1-x_0)} $$</p>
+
+<p>In <em>drawrend.h</em> <code> fill_color</code>,  I simply parsed the <code>float</code> rgb components of <code>c</code> and multiplied by 255 followed by a cast to <code>unsigned char</code> to meet the requirements for <code>PixelColorStorage</code>.</p>
+<p>In <em>drawrend.cpp</em>, I added two helper functions <em>dot_prod</em>, which I intended to calculate the dot product $$ {V \cdot N} $$, and <em>point_in_tri</em>. which determines if a point is bounded by the three points of the triangle by calculating three dot products and ensuring that they all have the same sign. Then, in  <code> rasterize_triangle</code>,  I simply iterate through all pixels on the screen within the bounding box of the triangle. </p>
+<p>To ensure I only checked within the bounding box of the triangle, I found the maximum and minimum x and y values of the three vertices. Then, I iterated through all of the x and y within those maximum and minimum bounds.</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/p1a.png" align="middle" width="400px"/>
+        <figcaption align="middle">Discontinuities.</figcaption>
+      </td>
+      <td>
+        <img src="images/p1b.png" align="middle" width="400px"/>
+        <figcaption align="middle">Jaggies.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h3 align="middle">Part 2: Antialiasing triangles</h3>
+
+<p>Supersampling is useful to reduce jaggies and discontinuities. To implement supersampling, <code>SampleBuffer</code> now contains more than one rgb value (total number is now <code>sample_rate</code>). Thus, for every iteration of <code>rasterize_triangle</code> from Part 1, we must iterate <code>sample_rate</code> more times to test if each subpixel is in the triangle. Note that this function does not do the antialiasing. The antialiasing is done in <em>drawrend.h</em> in <code>get_pixel_color</code>, where I take the average rgb value of all the subpixels in a pixel to determine the rgb value for the pixel.</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/p2a.png" align="middle" width="400px"/>
+        <figcaption align="middle">Discontinuities: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p2b.png" align="middle" width="400px"/>
+        <figcaption align="middle">Discontinuities: Supersample rate: 4 per pixel.</figcaption>
+      </td>
+    </tr>
+	 <tr>
+      <td>
+        <img src="images/p2c.png" align="middle" width="400px"/>
+        <figcaption align="middle">Discontinuities: Supersample rate: 9 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p2d.png" align="middle" width="400px"/>
+        <figcaption align="middle">Discontinuities: Supersample rate: 16 per pixel.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/p2e.png" align="middle" width="400px"/>
+        <figcaption align="middle">Jaggies: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p2f.png" align="middle" width="400px"/>
+        <figcaption align="middle">Jaggies: Supersample rate: 4 per pixel.</figcaption>
+      </td>
+    </tr>
+	 <tr>
+      <td>
+        <img src="images/p2g.png" align="middle" width="400px"/>
+        <figcaption align="middle">Jaggies: Supersample rate: 9 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p2h.png" align="middle" width="400px"/>
+        <figcaption align="middle">Jaggies: Supersample rate: 16 per pixel.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p>We see that supersampling reduces jaggies and discontinuities, because it essentially takes a "poll" over all subpixels in a pixel and chooses the average rgb value for the pixel. Thus, the rgb values of pixels are no longer all completely ON or completely OFF (binary).</p>
+
+<h3 align="middle">Part 3: Transforms</h3>
+
+<p>2D Transformations:</p>
+<p>Scaling: $$ {\begin{bmatrix}s_x & 0 & 0 \\0 & s_y & 0\\0 & 0 & 1\end{bmatrix}} $$</p>
+<p>Rotation: $$ {\begin{bmatrix}\cos\alpha & -\sin\alpha & 0 \\\sin\alpha & \cos\alpha & 0\\0 & 0 & 1\end{bmatrix}} $$</p>
+<p>Translation: $$ {\begin{bmatrix}1 & 0 & t_x \\0 & 1 & t_y\\0 & 0 & 1\end{bmatrix}} $$</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/p3a.png" align="middle" width="400px"/>
+        <figcaption align="middle">robot.svg: T-pose.</figcaption>
+      </td>
+      <td>
+        <img src="images/p3b.png" align="middle" width="400px"/>
+        <figcaption align="middle">robot_new.svg: Charge.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+
+<h2 align="middle">Section II: Sampling</h2>
+
+<h3 align="middle">Part 4: Barycentric coordinates</h3>
+
+<p>I made a copy of test7.svg named test7_new.svg, which only has one triangle with red, green, and blue vertices. This helps us visualize what the Barycentric coordinates are doing. Essentially, the values (rgb, textures, lighting, etc...) of a vertex can be determined as a weighted sum of the values of the three vertices forming the triangle.</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/p4a.png" align="middle" width="400px"/>
+        <figcaption align="middle">test7_new.svg: Triangle with red, green, and blue vertices using Barycentric coordinates.</figcaption>
+      </td>
+      <td>
+        <img src="images/p4b.png" align="middle" width="400px"/>
+        <figcaption align="middle">test7.svg: Color wheel using Barycentric coordinates.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h3 align="middle">Part 5: "Pixel sampling" for texture mapping</h3>
+
+<p>Each point in screen space maps to a point in texture space. Nearest pixel sampling means that we choose the nearest point in texture space to the point mapped from screen space to texture space. Bilinear pixel sampling involves the four nearest points in texture space to the mapped point and assigning its values to the weighted sum (linear interpolation) of the values of the four nearest points. </p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/p5a.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest pixel sampling: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p5b.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear pixel sampling: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+    </tr>
+	 <tr>
+      <td>
+        <img src="images/p5c.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest pixel sampling: Supersample rate: 16 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p5d.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear pixel sampling: Supersample rate: 16 per pixel.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p>Bilinear pixel sampling produces smoother images than nearest pixel sampling when the supersample rate is low. When the supersample rate is high, the abrupt changes in values due to nearest pixel sampling is mitigated due to the averaging effect of supersampling.</p>
+
+<h3 align="middle">Part 6: "Level sampling" with mipmaps for texture mapping</h3>
+
+<p>When the sampling rate for screen space and texture space differ, we either have magnification or minification. Thus, to keep the texel to pixel ratio close to 1, different versions of the textures are available for value sampling. These different versions (levels) have different area sizes and tends to be a power of 2. We can choose these levels by calculating the magnitude of the Jacobian from the change of coordinate systems and taking the logarithm. </p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/p6a.png" align="middle" width="400px"/>
+        <figcaption align="middle">P_NEAREST, L_ZERO: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p6b.png" align="middle" width="400px"/>
+        <figcaption align="middle">P_NEAREST, L_NEAREST: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+    </tr>
+	 <tr>
+      <td>
+        <img src="images/p6c.png" align="middle" width="400px"/>
+        <figcaption align="middle">P_NEAREST, L_LINEAR: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p6d.png" align="middle" width="400px"/>
+        <figcaption align="middle">P_LINEAR, L_ZERO: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+    </tr>
+	 <tr>
+      <td>
+        <img src="images/p6e.png" align="middle" width="400px"/>
+        <figcaption align="middle">P_LINEAR, L_NEAREST: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+      <td>
+        <img src="images/p6f.png" align="middle" width="400px"/>
+        <figcaption align="middle">P_LINEAR, L_LINEAR: Supersample rate: 1 per pixel.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p>I chose a high-resolution image of the Periodic Table for the .png image.  I noticed that for some cases, the far left and right edges became blurry. Interestingly, near the far left and right edges, the abruptness in pixel values due to nearest pixel sampling seems to be desirable in this case, whereas the smoothing capability of bilinear pixel sampling and  bilinear level sampling seems only desirable near the center of the image, but causes blurriness near the edges. </p>
+
+</body>
+</html>
